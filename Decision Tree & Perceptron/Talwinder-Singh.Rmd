@@ -1,0 +1,222 @@
+---
+title: "Decision Tree, Random Forest and Perceptron"
+author: Talwinder Singh
+output:
+  html_notebook:
+    toc: yes
+    toc_float: yes
+  html_document:
+    df_print: paged
+    toc: yes
+---
+### DECISION TREE DATA CLEANING 
+```{r}
+library(dplyr)
+dfTrain = read.csv("adult-train.csv", sep = ",", header = T)
+dfTest = read.csv("adult-test.csv", sep = ",", header = T)
+set.seed(1122)
+V = which(dfTrain$occupation == "?" | dfTrain$native_country == "?" | dfTrain$workclass == "?")
+#REMOVED ROWS WHERE THERE WAS ? FROM TRAIN DATA SET
+dfTrain = dfTrain[-c(V),]
+dfTrain
+summary(dfTrain)
+#REMOVED ROWS WHERE THERE WAS ? FROM TEST DATA SET
+dfTest = dfTest[-c(which(dfTest$occupation == "?" | dfTest$native_country == "?" | dfTest$workclass == "?")),]
+dfTest
+```
+
+### DECISION TREE MoDEL
+```{r}
+library(rpart)
+model <- rpart(income~ ., data = dfTrain, control=rpart.control(minsplit=2, minbucket=1))
+```
+### Part pLOT DECISION TREE
+```{r}
+library(rpart.plot)
+rpart.plot(model, extra=104, fallen.leaves = T, type=1, main="Decision Tree")
+summary(model)
+```
+### ANALYSIS OF MODEL
+```{r}
+
+# Top 3 predictors are Relationship, marital_status and Education
+# The first split is done on relationship
+# Predicted class is <=50%
+# Distribution At root node of <=50% & > 50% is .751 and .249 respectively
+```
+### CONFUSION MATRIX FOR MORE ANALYSIS 
+```{r}
+library(caret)
+pred.model = predict(model, dfTest, type="class")
+con_matrix = confusionMatrix(pred.model, dfTest[,15])
+con_matrix
+```
+### PLOT AUC CURVE 
+```{r}
+library(ROCR)
+pred.rocr <- predict(model, newdata = dfTest, type="prob")[,2]
+f.pred <- prediction(pred.rocr, dfTest$income)
+f.perf <- performance(f.pred, "tpr", "fpr")
+plot(f.perf, colorize=T, lwd=3)
+abline(0,1)
+auc <- performance(f.pred, measure = "auc")
+sprintf("The area under curve (AUC) for this model is %s",round(auc@y.values[[1]], 3))
+```
+
+### RECTIFYING CLASS IMBALANCE
+```{r}
+majUnbalanced.df = subset(dfTrain, dfTrain$income == "<=50K")
+min.df = subset(dfTrain, dfTrain$income == ">50K")
+set.seed(1122)
+index = sample(1:nrow(majUnbalanced.df), size = 7508)
+majBalanced.df = majUnbalanced.df[index,]
+newTrainDataSet = rbind(min.df,majBalanced.df)
+summary(newTrainDataSet)
+```
+### NEW DECISION TREE
+```{r}
+newModel <- rpart(income~ ., data = newTrainDataSet, control=rpart.control(minsplit=2, minbucket=1))
+rpart.plot(newModel, extra=104, fallen.leaves = T, type=1, main="Decision Tree from balanced dataSet")
+pred.model = predict(newModel, dfTest, type="class")
+con_matrix = confusionMatrix(pred.model, dfTest[,15])
+con_matrix
+```
+
+### PLOT NEW DECISION TREE
+```{r}
+pred.rocr <- predict(newModel, newdata = dfTest, type="prob")[,2]
+f.pred <- prediction(pred.rocr, dfTest$income)
+f.perf <- performance(f.pred, "tpr", "fpr")
+plot(f.perf, colorize=T, lwd=3)
+abline(0,1)
+auc <- performance(f.pred, measure = "auc")
+sprintf("The area under curve (AUC) for this model is %s",round(auc@y.values[[1]], 3))
+```
+### OBSERVATION OF NEW DECISION TREE
+```{r}
+sprintf("The balanced accuracy has increased after doing undersampling on the majority class, The sensitivity and specificity values come closer to each other after doing undersampling, Positive Predicted Valuse has increased and Area Under Curve also has increased a little")
+```
+### RANDOM FOREST
+```{r}
+library(randomForest)
+set.seed(1122)
+RFmodel <- randomForest(dfTrain$income ~ ., data=dfTrain)
+pred <- predict(RFmodel, dfTest, type="class")
+confusionMatrix(pred, as.factor(dfTest$income))
+print(RFmodel)
+
+### The sensitivity is high and the specificity is low which implies that we need to check the balanced accuracy for the fit. As balanced accuracy is high the model is good fit. 
+```
+### RANDOM FOREST WITH HYPER-PARAMETERS
+```{r}
+
+Ba = c()
+labelsBalAcc = c("BalAcc_1", "BalAcc_2","BalAcc_3", "BalAcc_4","BalAcc_5", "BalAcc_6")
+
+Sen = c()
+labelsSen = c("Sensitivity_1", "Sensitivity_2","Sensitivity_3", "Sensitivity_4","Sensitivity_5", "Sensitivity_6")
+
+Spec = c()
+labelsSpeci = c("Specficity_1", "Specficity_2","Specficity_3", "Specficity_4","Specficity_5", "Specficity_6")
+
+oob = c()
+labelsOOB = c("OOB_1", "OOB_2","OOB_3", "OOB_4","OOB_5", "OOB_6")
+#check = matrix()
+#l
+itr = 1
+for(i in c(100,750)){
+  for(j in c(2,5,7)){
+    RFMode <- randomForest(dfTrain$income ~ ., data=dfTrain, ntree = i, mtry = j, replace = TRUE)
+    pred <- predict(RFMode, dfTest, type="class")
+    l = confusionMatrix(pred, as.factor(dfTest$income))
+    Ba[itr] = l$byClass[11]
+    Sen[itr] = l$byClass[1]
+    Spec[itr] = l$byClass[2]
+    itr = itr + 1
+    errordf = RFMode$err.rate
+    oob[itr] = errordf[i,1]
+   
+   
+  }
+}
+names(oob) = labelsOOB
+sprintf("The OOB error of all six models are")
+oob
+
+names(Ba) = labelsBalAcc
+sprintf("The Balanced Accuracy of all six models are")
+Ba
+
+names(Sen) = labelsSen
+sprintf("The Sensitivity of all six models are")
+Sen
+
+names(Spec) = labelsSpeci
+sprintf("The specificity of all six models are")
+Spec
+
+```
+### OBSERVATIONS
+```{r}
+sprintf("Maximum Balanced accuracy of 1st model is maximum(.7843) thus implying that it is a best model with no of tree = 100 and mtry = 2")
+sprintf("4th model has least OOB error(0.1368) with ntree = 750 and mtry = 2")
+sprintf("The two models differs by a small scale. In First the the no of trees to grow are 100 as compared to other one with 750. As the no of mtry are same but due to large difference in ntree, the second model becomes more stable and thus yields less OOB")
+```
+### PERCEPTRON
+```{r}
+library(ggplot2)
+per_data = read.csv("data-500.csv", sep = ",")
+#k = epochs
+k = 0
+#wv = weightvector
+wv = c(0.1, 0, 0)
+aver_error_per_epoch = c()
+threshold = 0.001
+
+repeat
+{
+   total_diff = 0
+   
+   for (i in 1:nrow(per_data))
+   {
+     
+     predicted = sign((wv[1] * per_data[i,2]) + (wv[2] * per_data[i,3]) + (wv[3] * per_data[i,4]))
+     
+     
+     curr_diff = per_data[i,1] - predicted
+     
+     total_diff = total_diff + abs(curr_diff)
+     
+      for (j in 1:length(wv))
+      {
+       
+        wv[j] = wv[j] + ( 0.1 * curr_diff * per_data[i,j+1])
+       
+      }
+     
+   }
+   
+   k = k + 1
+   aver_error_per_epoch[k] = abs(total_diff/nrow(per_data))
+   if(aver_error_per_epoch[k] <= threshold)
+    break
+}
+#SLOPE
+sl = -(wv[2]/wv[3])
+#INTERCEPT
+intcpt = -(wv[1]/wv[3])
+#USE GGPLOT TO PLOT THE POINT AND THE HPER-PLANE USING THE INTERCEPT AND SLOPE
+ggplot(per_data, aes(x = per_data[,3], y = per_data[,4])) +
+        geom_point(aes(colour=label),size=1.5) +
+        geom_abline(intercept= intcpt, slope = sl)+
+        xlab("X1") +
+        ylab("X2") +
+        ggtitle("Perceptron model ")
+```
+### OBSERVATIONS
+```{r}
+sprintf("No of epochs required  %d and average error per epoch is are",k)
+aver_error_per_epoch
+sprintf("Trained weights including are bias = %f w1 = %f w2 = %f", wv[1], wv[2], wv[3])
+sprintf("The intercept is %f",intcpt)
+```

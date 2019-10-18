@@ -1,0 +1,74 @@
+---
+title: "LINEAR REGRESSION"
+output: 
+  html_notebook:
+    toc: yes
+    toc_float: yes
+author: Talwinder-Singh
+---
+### UNIVARIATE REGRESSION
+```{r}
+library(psych)
+nba.df = read.csv("nba.csv", header =  T, sep = ",")
+new.df = subset(nba.df, select = -c(PLAYERFULLNAME,SEASON,OWNTEAM,OPPTEAM))
+sprintf("I have picked FG")
+mod = lm(PTS~FG, new.df)
+summary(mod)
+### The model is a good fit as the variance or the adjusted R^2 is .91, also FG predictor is really significant(***). Moreover the Pr value of the coefficient is low which shows that the t values are accurately predicted.
+```
+### REGRESSION PLOT
+```{r}
+#PLOTTINF THE ABOVE REGRESSION
+plot(new.df$FG,new.df$PTS, xlab = "points", ylab = "Field Goals", main = "Relation Between x and y")
+abline(mod)
+#SPLITTING THE DATA INTO TWO SUB DATASETS NAMELY TRAIN AND TEST DATASET
+set.seed(1122)
+index <- sample(1:nrow(nba.df), 250)# PICKS RANDOMLY 250 OBSERVATIONS FROM THE DATAFRAME AND ASSIGN TO INDEX
+train <- nba.df[index, ]
+test <- nba.df[-index, ]
+train
+test
+```
+
+### CORRELATION
+```{r}
+pairs.panels(train[,6:23],gap = 0)
+#MAKING A DATAFRAME OF THE MOST IMPORTANT PREDICTORS
+subsetFrame = subset(train, select = c(PTS,FG,X3P,FT,FTA,MIN))
+#CORRELATION PLOT OF THE MOST IMPORTANT PREDICTORS
+pairs.panels(subsetFrame)
+```
+### MULTIVARIATE REGRESSON MODEL
+```{r}
+#BUILDING A MULTIVARIATE LINEAR REGRESSON MODEL
+mpl.Regressor.model = lm(PTS~FG+FTA+X3P, train)
+#PRINTING SUMMARY OF MODEL
+summary(mpl.Regressor.model)
+confint(mpl.Regressor.model, level=0.95)# SETTING THE CONFIDENCE INTERVAL
+### More is the adjusted R^2 value better is the model.THe model is good fit for the data as the variance or R^2, F-statistic has the values, also all the three predictor are significant which we see from the three stars attached to each predictor.
+```
+### PLOT REGRESSION MODEL
+```{r}
+#
+plot(mpl.Regressor.model$fitted.values, mpl.Regressor.model$residuals, 
+     xlab = "Fitted values", 
+     ylab="Residuals", 
+     main="Residuals vs. Fitted for PTS"
+     ); 
+abline(0, 0)
+#PLOT REGRESSION MODEL TO LOOK FOR THE FITTNESS OF THE MODEL
+plot(mpl.Regressor.model)
+### The homoscedasticity is proved by the graph of residuals as they are normally distributed which is one of the property of the good model
+```
+### HISTOGRAM OF RESIDUALS
+```{r}
+hist(mpl.Regressor.model$residuals,col = "blue", border = "Green",xlab = "Residuals",main = "Histogram of Residuals")
+### The histogram follows Gaussian Distribution
+```
+### PREDICTION OF MODEL
+```{r}
+predicted = predict.lm(mpl.Regressor.model, test , interval="prediction", level=0.95, datatype="numeric")
+prediction_verification = data.frame(val_predicted=as.integer(predicted[,1]), true_values=test$PTS)
+matched = prediction_verification$val_predicted == prediction_verification$true_values
+sprintf("Number of exact match with predicted is %i", sum(matched))
+```
